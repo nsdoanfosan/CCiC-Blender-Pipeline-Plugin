@@ -15,7 +15,7 @@
 # along with CC/iC-Blender-Pipeline-Plugin.  If not, see <https://www.gnu.org/licenses/>.
 
 import RLPy
-from btp import vars, prefs, error, options, utils, cc, qt, tests, importer, exporter, morph, link, gob
+from btp import vars, prefs, error, options, utils, cc, qt, tests, importer, exporter, morph, link, gob, kimodo_integration
 
 
 rl_plugin_info = { "ap": "iClone", "ap_version": "8.0" }
@@ -79,6 +79,8 @@ def initialize_plugin():
     link.get_data_link()
     if OPTS.AUTO_START_SERVICE:
         link.link_auto_start()
+    elif kimodo_integration.AUTO_START_SERVICE:
+        link.link_auto_start(bind_host="127.0.0.1")
 
     BLOCK_UPDATE = False
 
@@ -190,7 +192,7 @@ def menu_reload():
     import importlib
     print("Reloading Scripts...")
     running, visible = link.link_stop()
-    modules = [ vars, prefs, error, options, utils, cc, qt, tests, importer, exporter, morph, link, gob ]
+    modules = [ vars, prefs, error, options, utils, cc, qt, tests, importer, exporter, morph, link, gob, kimodo_integration ]
     for module in modules:
         importlib.reload(module)
     print("Done Reloading Scripts.")
