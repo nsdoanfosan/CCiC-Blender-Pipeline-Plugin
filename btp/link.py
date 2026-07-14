@@ -2507,6 +2507,16 @@ class DataLink(QObject):
                             selected_actor_objects.append(actor_object)
         return actors
 
+    def get_avatar_actors(self):
+        """Return every avatar, recording whether Data Link assigned its ID now."""
+        actors = []
+        for avatar in RScene.GetAvatars():
+            had_valid_link_id = cc.validate_link_id(avatar)
+            actor = LinkActor(avatar)
+            actor.kimodo_link_id_was_new = not had_valid_link_id
+            actors.append(actor)
+        return actors
+
     def get_active_actor(self):
         avatar = cc.get_first_avatar()
         if avatar:
@@ -3968,8 +3978,12 @@ class DataLink(QObject):
         self.update_link_status(f"Receiving Request ...")
         json_data = decode_to_json(data)
         request_type = json_data["type"]
-        if request_type == kimodo_integration.REQUEST_TYPE:
-            response, actors = kimodo_integration.selected_target_response(self)
+        if request_type == kimodo_integration.CATALOG_REQUEST_TYPE:
+            response = kimodo_integration.catalog_response(self)
+            self.send(OpCodes.CONFIRM, encode_from_json(response))
+            return
+        if request_type == kimodo_integration.TARGET_REQUEST_TYPE:
+            response, actors = kimodo_integration.exact_target_response(self, json_data)
             self.send(OpCodes.CONFIRM, encode_from_json(response))
             if actors:
                 self.send_actors(actors)
