@@ -1,4 +1,11 @@
 # CC/iClone Blender Pipeline Plugin
+
+> **Kimodo integration fork (modified 2026-07-14):** This fork auto-starts the
+> official Data Link service and handles a GPLv3 `KIMODO_TARGET` request by
+> transferring the single avatar currently selected in iClone. This is paired
+> with the Kimodo integration fork of `cc_blender_tools`. Its automatic local
+> service binds to `127.0.0.1` only.
+
 **(Installed in CC4 and iClone 8)**
 
 **This plugin is for Character Creator 4 and iClone 8, for Character Creator 3 [look here](https://github.com/soupday/CC3-Blender-Tools-Plugin)**

@@ -21,7 +21,7 @@ from PySide2.QtCore import *
 from PySide2.QtGui import *
 from shiboken2 import wrapInstance
 import os, socket, select, struct, time, json, atexit, traceback, shutil
-from . import vars, utils, cc, qt, options, prefs, tests, importer, exporter, morph, gob
+from . import vars, utils, cc, qt, options, prefs, tests, importer, exporter, morph, gob, kimodo_integration
 from . utils import LI, LW, LD, log_info, log_detail, log_warn, log_error
 from . error import ErrorCode, error_report, error_reset, error_show
 from enum import IntEnum
@@ -1022,8 +1022,9 @@ class LinkService(QObject):
     # temp
     temp_path: str = None
 
-    def __init__(self):
+    def __init__(self, bind_host=""):
         QObject.__init__(self)
+        self.bind_host = bind_host
         atexit.register(self.service_stop)
 
     def __enter__(self):
@@ -1038,19 +1039,21 @@ class LinkService(QObject):
                 self.keepalive_timer = HANDSHAKE_TIMEOUT_S
                 self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.server_sock.settimeout(SOCKET_TIMEOUT)
-                self.server_sock.bind(('', SERVER_PORT))
+                self.server_sock.bind((self.bind_host, SERVER_PORT))
                 self.server_sock.listen(5)
                 #self.server_sock.setblocking(True)
                 self.server_sockets = [self.server_sock]
                 self.is_listening = True
-                if LI(): log_info(f"Listening on TCP *:{SERVER_PORT}")
+                host_label = self.bind_host or "*"
+                if LI(): log_info(f"Listening on TCP {host_label}:{SERVER_PORT}")
                 self.listening.emit()
                 self.changed.emit()
             except:
                 self.server_sock = None
                 self.server_sockets = []
                 self.is_listening = True
-                log_error(f"Unable to start server on TCP *:{SERVER_PORT}")
+                host_label = self.bind_host or "*"
+                log_error(f"Unable to start server on TCP {host_label}:{SERVER_PORT}")
 
     def stop_server(self):
         try:
@@ -1534,6 +1537,7 @@ class DataLink(QObject):
     set_keyframes: bool = True
     host_ip: str = "127.0.0.1"
     host_port: int = SERVER_PORT
+    bind_host: str = ""
     target: str = "Blender"
     # Callback
     callback: LinkEventCallback = None # type: ignore
@@ -2209,7 +2213,7 @@ class DataLink(QObject):
     def link_start(self):
         link_service = self.get_link_service()
         if not link_service:
-            link_service = LinkService()
+            link_service = LinkService(self.bind_host)
             link_service.changed.connect(self.show_link_state)
             link_service.received.connect(self.parse)
             link_service.connected.connect(self.on_connected)
@@ -2501,6 +2505,16 @@ class DataLink(QObject):
                             (actor.get_type() == of_types)):
                             actors.append(actor)
                             selected_actor_objects.append(actor_object)
+        return actors
+
+    def get_avatar_actors(self):
+        """Return every avatar, recording whether Data Link assigned its ID now."""
+        actors = []
+        for avatar in RScene.GetAvatars():
+            had_valid_link_id = cc.validate_link_id(avatar)
+            actor = LinkActor(avatar)
+            actor.kimodo_link_id_was_new = not had_valid_link_id
+            actors.append(actor)
         return actors
 
     def get_active_actor(self):
@@ -3964,6 +3978,16 @@ class DataLink(QObject):
         self.update_link_status(f"Receiving Request ...")
         json_data = decode_to_json(data)
         request_type = json_data["type"]
+        if request_type == kimodo_integration.CATALOG_REQUEST_TYPE:
+            response = kimodo_integration.catalog_response(self)
+            self.send(OpCodes.CONFIRM, encode_from_json(response))
+            return
+        if request_type == kimodo_integration.TARGET_REQUEST_TYPE:
+            response, actors = kimodo_integration.exact_target_response(self, json_data)
+            self.send(OpCodes.CONFIRM, encode_from_json(response))
+            if actors:
+                self.send_actors(actors)
+            return
         actors_data = json_data["actors"]
         for actor_data in actors_data:
             name = actor_data["name"]
@@ -4377,11 +4401,12 @@ class DataLink(QObject):
 
 LINK: DataLink = None
 
-def link_auto_start():
+def link_auto_start(bind_host=""):
     global LINK
     if LI(): log_info("Auto-starting Data-link!")
     if not LINK:
         LINK = DataLink()
+    LINK.bind_host = bind_host
     LINK.link_start()
 
 def get_data_link():
